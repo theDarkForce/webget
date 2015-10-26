@@ -17,6 +17,7 @@ def get_page(url):
 	return the_page
 
 def get_link(data):
+
 	return
 
 def process_page(data):
@@ -27,6 +28,8 @@ def process_page(data):
 		div = s.push(ch)
 		if div is not None:
 			d.append(div)
-	return
+
+
+	#get_link()
 
 process_page(get_page(url))

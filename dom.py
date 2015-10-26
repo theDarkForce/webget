@@ -8,6 +8,3 @@ class dom(object):
 
 	def append(self, div):
 		self.dom.append(div)
-
-	def append(self, dom):
-		self.dom.append(dom)
