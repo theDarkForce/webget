@@ -16,7 +16,11 @@ def get_page(url):
 
 	return the_page
 
-def get_link(data):
+def processlink(url):
+	process_page(get_page(url))
+
+
+def process_data(data):
 
 	return
 
@@ -26,10 +30,13 @@ def process_page(data):
 	d = dom()
 	for ch in data:
 		div = s.push(ch)
-		if div is not None:
+		if div[1] is not None:
 			d.append(div)
 
+	for it in d.dom:
+		if it[0] == 'a':
+			processlink(it[1])
+		if it[0] == 'div' or it[0] == 'p':
+			process_data(it[1])
 
-	#get_link()
-
-process_page(get_page(url))
+processlink(url)

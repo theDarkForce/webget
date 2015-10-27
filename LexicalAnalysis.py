@@ -74,6 +74,6 @@ class statemachine(object):
 		if len(self.stack_div) != 0:
 			self.stack_div[-1] += ch
 
-		return div
+		return self.divtype, div
 
 
