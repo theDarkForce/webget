@@ -9,6 +9,9 @@ from dom import  *
 
 url = "http://jj.hbtv.com.cn/"
 
+def process_data(data):
+	return
+
 def get_page(url):
 	req = urllib2.Request(url)
 	response = urllib2.urlopen(req)
@@ -16,9 +19,8 @@ def get_page(url):
 
 	return the_page
 
-def get_link(data):
-
-	return
+def process_link(url):
+	process_page(get_page(url))
 
 def process_page(data):
 	s = statemachine()
@@ -29,7 +31,10 @@ def process_page(data):
 		if div is not None:
 			d.append(div)
 
+	for it in d.dom:
+		if it[0] == 'a':
+			process_link(it[1])
+		elif it[0] == 'p':
+			process_data(it[1])
 
-	#get_link()
-
-process_page(get_page(url))
+process_link(url)
