@@ -38,7 +38,7 @@ class statemachine(object):
 				self.current_div = ""
 		elif ch == ">":
 			if self.strstate != statemachine.instr1 and self.strstate != statemachine.instr2 and self.strstate != statemachine.instr3:
-				if ((self.divtype == self.endtype or self.endtype == "")) or self.state == statemachine.notes:
+				if (self.state == statemachine.waitend and (self.divtype == self.endtype or self.endtype == "")) or self.state == statemachine.notes:
 					div = self.current_div + ch
 					if len(self.stack_div) == 0:
 						self.current_div = None
