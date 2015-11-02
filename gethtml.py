@@ -4,7 +4,7 @@
 # autor: qianqians
 
 import urllib2
-from LexicalAnalysis import *
+import HTMLParser
 from dom import *
 from doclex import doclex
 import pymongo
@@ -13,8 +13,21 @@ url = "http://jj.hbtv.com.cn/"
 
 collection = None
 
-def process_data(data):
-    return doclex.lex(data)
+'''
+def get_data(str):
+    str1 = ""
+    type = False
+    for ch in str:
+        if ch == '>':
+            type = True
+            continue
+        elif ch == '<':
+            if type == True:
+                break
+        if type:
+            str1 += ch
+    print str, str1, 'get_data'
+    return str1
 
 def get_link(str):
     try:
@@ -62,6 +75,45 @@ def get_link(str):
             url += ch
 
     return url
+'''
+
+class htmlprocess(HTMLParser.HTMLParser):
+    def __init__(self, url):
+        self.link = []
+        self.data = []
+        self.key_url = []
+
+        self.url = url
+        self.link_url = ""
+
+        self.current_tag = ""
+
+        HTMLParser.HTMLParser.__init__(self)
+
+    def handle_starttag(self, tag, attrs):
+        self.current_tag = tag
+
+        if tag == 'a':
+            for name,value in attrs:
+                if name == 'href':
+                    self.link_url = value
+                    self.link.append(value)
+
+    def handle_data(self, data):
+        if self.current_tag == 'title':
+            keys = doclex.simplesplit(data)
+            for key in keys:
+                self.key_url.append({'key':key, 'url': self.url})
+        elif self.current_tag == 'a':
+            keys = doclex.simplesplit(data)
+            if isinstance(keys, list) and len(keys) > 0:
+                for key in keys:
+                    self.key_url.append({'key':key, 'url': self.link_url})
+        else:
+            self.data.append(data)
+
+def process_data(data):
+    return doclex.lex(data)
 
 def get_page(url):
     try:
@@ -76,44 +128,29 @@ def get_page(url):
 def process_link(url):
     process_page(url, get_page(url))
 
-def get_data(str):
-    str1 = ""
-    type = False
-    for ch in str:
-        if ch == '>':
-            type = True
-            continue
-        elif ch == '<':
-            if type == True:
-                break
-        if type:
-            str1 += ch
-    print str, str1, 'get_data'
-    return str1
-
 def process_page(url, data):
-    linkinurl = []
+    if data is None:
+        return
 
-    s = statemachine()
-    d = dom()
-    for ch in data:
-        div = s.push(ch)
-        if div[1] is not None:
-            d.append(div)
-        print d.dom
+    htmlp = htmlprocess(url)
+    htmlp.feed(data)
 
-    for it in d.dom:
-        if it[0] == 'p':
-            str = get_data(it[1])
-            key = process_data(str)
-            collection.insert({"key":key,"url":url})
-            print {"key":key,"url":url}
-        elif it[0] == 'a':
-            url1 = get_link(it[1])
-            linkinurl.append(url1)
+    for it in htmlp.key_url:
+        collection.insert(it)
 
-    for url2 in linkinurl:
-        process_link(url2)
+    for data in htmlp.data:
+        if len(data) > 32:
+            keys = doclex.simplesplit(data)
+            if isinstance(keys, list) and len(keys) > 0:
+                for key in keys:
+                    collection.insert({'key':key, 'url': url})
+        else:
+            keys1 = process_data(data)
+            for key1 in keys1:
+                collection.insert({"key":key1,"url":url})
+
+    for url1 in htmlp.link:
+        process_link(url1)
 
 
-process_link(url)
+#process_link(url)
