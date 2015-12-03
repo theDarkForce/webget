@@ -3,6 +3,10 @@
 # create at 2015/10/11
 # autor: qianqians
 
+import sys
+reload(sys)
+sys.setdefaultencoding('utf8')
+
 import urllib2
 import HTMLParser
 from doclex import doclex
@@ -146,7 +150,7 @@ def get_page(url):
         pass
 
 def process_link(url):
-    key_url, url_profile_dict = process_url_real(url, [])
+    url_profile_dict = process_url_real(url, [])
 
     for key, value in url_profile_dict.iteritems():
         encoding = chardet.detect(value)
@@ -187,7 +191,7 @@ def process_url_real(url, process_link_list):
             pageinfo = process_page(url, data)
             if pageinfo is not None:
                 linklist, keyurl, urlprofile = pageinfo
-                link_list.extend((linklist))
+                link_list.extend(linklist)
                 for key, value in keyurl.iteritems():
                     if key_url.has_key(key):
                         key_url[key] += value
@@ -202,11 +206,6 @@ def process_url_real(url, process_link_list):
             linklist, keyurl, urlprofile = process_sub_link_list(data_list, process_link_list)
 
             data_list = {}
-            for url in linklist:
-                data = get_page(url)
-                if data is not None:
-                    data_list[url] = data
-
             for key, value in keyurl.iteritems():
                 if not key_url.has_key(key):
                     key_url[key] = []
@@ -222,6 +221,19 @@ def process_url_real(url, process_link_list):
                     if url not in key_url[key]:
                         key_url[key].append(url)
                         collection.insert({'key':key, 'url':url, 'timetmp':time.time()})
+
+                if len(data_list) > 50:
+                    url_profile_dict.update(lprocess_link_list(data_list, key_url, process_link_list))
+                    data_list = {}
+
+            for url in linklist:
+                data = get_page(url)
+                if data is not None:
+                    data_list[url] = data
+
+                if len(data_list) > 50:
+                    url_profile_dict.update(lprocess_link_list(data_list, key_url, process_link_list))
+                    data_list = {}
 
             url_profile_dict.update(urlprofile)
 
@@ -244,7 +256,7 @@ def process_url_real(url, process_link_list):
                 key_url[key].append(url)
                 collection.insert({'key':key, 'url':url, 'timetmp':time.time()})
 
-            if len(data_list) > 100:
+            if len(data_list) > 50:
                 url_profile_dict.update(lprocess_link_list(data_list, key_url, process_link_list))
                 data_list = {}
 
@@ -254,7 +266,7 @@ def process_url_real(url, process_link_list):
             if data is not None:
                 data_list[url] = data
 
-            if len(data_list) > 100:
+            if len(data_list) > 50:
                 url_profile_dict.update(process_link_list(data_list, key_url, process_link_list))
                 data_list = {}
 
@@ -269,7 +281,9 @@ def process_page(url, data):
         url_profile = ""
 
         htmlp = htmlprocess(url)
-        htmlp.feed(data)
+        encoding = chardet.detect(data)
+        udata = unicode(data, encoding['encoding'])
+        htmlp.feed(udata.encode('utf-8'))
 
         key_url.update(htmlp.key_url)
         if len(key_url) > 0:
