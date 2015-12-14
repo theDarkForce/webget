@@ -18,6 +18,7 @@ url = "http://jj.hbtv.com.cn/"
 
 collection = None
 collection_url_profile = None
+collection_url_title = None
 
 '''
 def get_data(str):
@@ -120,6 +121,7 @@ class htmlprocess(HTMLParser.HTMLParser):
                     if not self.key_url.has_key(key):
                         self.key_url[key] = []
                     self.key_url[key].append(self.url)
+            collection_url_title.insert({'key':url, 'title':data, 'timetmp':time.time()})
         elif self.current_tag == 'a':
             if not judged_url(self.link_url):
                 self.link_url = self.url + self.link_url
@@ -141,8 +143,9 @@ def get_page(url):
         req = urllib2.Request(url)
         response = urllib2.urlopen(req)
         the_page = response.read()
+        headers = response.info()
 
-        return the_page
+        return the_page, headers
     except:
         #import traceback
         #traceback.print_exc()
@@ -152,10 +155,10 @@ def get_page(url):
 def process_link(url):
     url_profile_dict = process_url_real(url, [])
 
-    for key, value in url_profile_dict.iteritems():
-        encoding = chardet.detect(value)
-        str = unicode(value, encoding['encoding'])
-        collection_url_profile.insert({'key':key, 'urlprofile':str, 'timetmp':time.time()})
+    #for key, value in url_profile_dict.iteritems():
+    #    encoding = chardet.detect(value)
+    #    str = unicode(value, encoding['encoding'])
+    #    collection_url_profile.insert({'key':key, 'urlprofile':str, 'timetmp':time.time()})
 
 def process_url_real(url, process_link_list):
     if url in process_link_list:
@@ -164,16 +167,22 @@ def process_url_real(url, process_link_list):
     process_link_list.append(url)
     url_profile_dict = {}
 
-    data = get_page(url)
-    if data is None:
+    info = get_page(url)
+    if info is None:
         return
+
+    data, headers = info
 
     pageinfo = process_page(url, data)
     if pageinfo is None:
         return
 
     link_list, key_url1, url_profile = pageinfo
-    url_profile_dict[url] = url_profile
+    encoding = chardet.detect(url_profile)
+
+    if encoding['encoding'] is not None:
+        url_profile = unicode(url_profile, encoding['encoding'])
+        collection_url_profile.insert({'key':url, 'urlprofile':url_profile, 'timetmp':time.time(), 'date:':headers['date']})
 
     key_url = {}
 
@@ -188,7 +197,7 @@ def process_url_real(url, process_link_list):
 
             process_link_list.append(url)
 
-            pageinfo = process_page(url, data)
+            pageinfo = process_page(url, data[0])
             if pageinfo is not None:
                 linklist, keyurl, urlprofile = pageinfo
                 link_list.extend(linklist)
@@ -197,7 +206,11 @@ def process_url_real(url, process_link_list):
                         key_url[key] += value
                     else:
                         key_url[key] = value
-                url_profile_dict[url] = urlprofile
+                encoding = chardet.detect(url_profile)
+                print 'collection_url_profile', url_profile, encoding
+                if encoding['encoding'] is not None:
+                    url_profile = unicode(url_profile, encoding['encoding'])
+                    collection_url_profile.insert({'key':url, 'urlprofile':url_profile, 'timetmp':time.time(),'date:':data[1]['date']})
 
         return link_list, key_url, url_profile_dict
 
@@ -212,9 +225,9 @@ def process_url_real(url, process_link_list):
 
                 for url in value:
                     if not data_list.has_key(url):
-                        data = get_page(url)
-                        if data is not None:
-                            data_list[url] = data
+                        info = get_page(url)
+                        if info is not None:
+                            data_list[url] = info
                         else:
                             continue
 
@@ -227,9 +240,9 @@ def process_url_real(url, process_link_list):
                     data_list = {}
 
             for url in linklist:
-                data = get_page(url)
-                if data is not None:
-                    data_list[url] = data
+                info = get_page(url)
+                if info is not None:
+                    data_list[url] = info
 
                 if len(data_list) > 50:
                     url_profile_dict.update(lprocess_link_list(data_list, key_url, process_link_list))
@@ -246,14 +259,15 @@ def process_url_real(url, process_link_list):
 
         for url in value:
             if not data_list.has_key(url):
-                data = get_page(url)
-                if data is not None:
-                    data_list[url] = data
+                info = get_page(url)
+                if info is not None:
+                    data_list[url] = info
                 else:
                     continue
 
             if url not in key_url[key]:
                 key_url[key].append(url)
+                print 'collection', key, url
                 collection.insert({'key':key, 'url':url, 'timetmp':time.time()})
 
             if len(data_list) > 50:
@@ -262,12 +276,12 @@ def process_url_real(url, process_link_list):
 
     for url in link_list:
         if not data_list.has_key(url):
-            data = get_page(url)
-            if data is not None:
-                data_list[url] = data
+            info = get_page(url)
+            if info is not None:
+                data_list[url] = info
 
             if len(data_list) > 50:
-                url_profile_dict.update(process_link_list(data_list, key_url, process_link_list))
+                url_profile_dict.update(lprocess_link_list(data_list, key_url, process_link_list))
                 data_list = {}
 
     return url_profile_dict
