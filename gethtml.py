@@ -14,78 +14,12 @@ import time
 import pymongo
 import chardet
 
-url = "http://jj.hbtv.com.cn/"
-
 collection = None
 collection_url_profile = None
 collection_url_title = None
 
-'''
-def get_data(str):
-    str1 = ""
-    type = False
-    for ch in str:
-        if ch == '>':
-            type = True
-            continue
-        elif ch == '<':
-            if type == True:
-                break
-        if type:
-            str1 += ch
-    print str, str1, 'get_data'
-    return str1
-
-def get_link(str):
-    try:
-        str1 = str.split("href")[1]
-
-        url = ""
-        type = 0
-        for ch in str1:
-            if ch == "\"":
-                if type == 0:
-                    type = 1
-                    continue
-                elif type == 1:
-                    break
-            elif ch == "'":
-                if type == 0:
-                    type = 2
-                    continue
-                elif type == 2:
-                    break
-            if type > 0:
-                url += ch
-
-        return url
-
-    except:
-        print 'error', str
-
-    url = ""
-    type = 0
-    for ch in str:
-        if ch == "\"":
-            if type == 0:
-                type = 1
-                continue
-            elif type == 1:
-                break
-        elif ch == "'":
-            if type == 0:
-                type = 2
-                continue
-            elif type == 2:
-                break
-        if type > 0:
-            url += ch
-
-    return url
-'''
-
 def judged_url(url):
-    if url.find('http') == -1:
+    if url is None or url.find('http') == -1:
         return False
     return True
 
@@ -98,12 +32,18 @@ class htmlprocess(HTMLParser.HTMLParser):
         self.url = url
         self.link_url = ""
 
+        self.keywords = []
+        self.profile = ""
+
         self.current_tag = ""
+
+        self.style = ""
 
         HTMLParser.HTMLParser.__init__(self)
 
     def handle_starttag(self, tag, attrs):
         self.current_tag = tag
+        self.style = 'None'
 
         if tag == 'a':
             for name,value in attrs:
@@ -112,16 +52,32 @@ class htmlprocess(HTMLParser.HTMLParser):
                         value = self.url + value
                     self.link_url = value
                     self.link.append(value)
+        elif tag == 'meta':
+            for name,value in attrs:
+                if name == 'name':
+                    if value == 'keywords' or value == 'metaKeywords':
+                        self.style = 'keywords'
+                    elif value == 'description' or value == 'metaDescription':
+                        self.style = 'profile'
+            for name,value in attrs:
+                if name == 'content':
+                    if self.style == 'keywords':
+                        self.keywords = doclex.simplesplit(value)
+                    elif self.style == 'profile':
+                        self.profile = value
+                        #print value
 
     def handle_data(self, data):
         if self.current_tag == 'title':
-            keys = doclex.simplesplit(data)
+            keys = doclex.lex(data)
             if isinstance(keys, list) and len(keys) > 0:
                 for key in keys:
                     if not self.key_url.has_key(key):
                         self.key_url[key] = []
                     self.key_url[key].append(self.url)
-            collection_url_title.insert({'key':url, 'title':data, 'timetmp':time.time()})
+            data = doclex.delspace(data)
+            if len(data) > 0:
+                collection_url_title.insert({'key':self.url, 'title':data, 'timetmp':time.time()})
         elif self.current_tag == 'a':
             if not judged_url(self.link_url):
                 self.link_url = self.url + self.link_url
@@ -135,8 +91,14 @@ class htmlprocess(HTMLParser.HTMLParser):
             if self.current_tag == 'p' or self.current_tag == 'div':
                 self.data.append(data)
 
-def process_data(data):
-    return doclex.lex(data)
+def real_page(url):
+    try:
+        req = urllib2.Request(url)
+        response = urllib2.urlopen(req)
+        headers = response.info()
+        return True
+    except:
+        return False
 
 def get_page(url):
     try:
@@ -152,139 +114,47 @@ def get_page(url):
         #print 'get_page error', url
         pass
 
-def process_link(url):
-    url_profile_dict = process_url_real(url, [])
-
-    #for key, value in url_profile_dict.iteritems():
-    #    encoding = chardet.detect(value)
-    #    str = unicode(value, encoding['encoding'])
-    #    collection_url_profile.insert({'key':key, 'urlprofile':str, 'timetmp':time.time()})
-
-def process_url_real(url, process_link_list):
-    if url in process_link_list:
-        return
-
-    process_link_list.append(url)
-    url_profile_dict = {}
-
+def process_url(url):
     info = get_page(url)
     if info is None:
+        print "url, error"
         return
 
     data, headers = info
 
     pageinfo = process_page(url, data)
+
     if pageinfo is None:
+        print "url, process_page error"
         return
 
-    link_list, key_url1, url_profile = pageinfo
-    encoding = chardet.detect(url_profile)
+    link_list, url_profile, keywords, profile, key_url = pageinfo
+    #encoding = chardet.detect(url_profile)
 
-    if encoding['encoding'] is not None:
-        url_profile = unicode(url_profile, encoding['encoding'])
-        collection_url_profile.insert({'key':url, 'urlprofile':url_profile, 'timetmp':time.time(), 'date:':headers['date']})
+    try:
+        #if encoding['encoding'] is not None:
+        encodingdate = chardet.detect(headers['date'])
+        date = unicode(headers['date'], encodingdate['encoding'])
+        if profile == '':
+            url_profile = unicode(url_profile, "utf-8")#encoding['encoding'])
+            collection_url_profile.insert({'key':url, 'urlprofile':url_profile, 'timetmp':time.time(), 'date:':date})
+        else:
+            profile = unicode(profile, "utf-8")
+            collection_url_profile.insert({'key':url, 'urlprofile':profile, 'timetmp':time.time(), 'date:':date})
 
-    key_url = {}
+        for key in keywords:
+            collection.insert({'key':key, 'url':url, 'timetmp':time.time()})
 
-    def process_sub_link_list(_data_list, process_link_list):
-        link_list = []
-        key_url = {}
-        url_profile_dict = {}
+        for key, value in key_url.iteritems():
+            for url in value:
+                if real_page(url):
+                    collection.insert({'key':key, 'url':url, 'timetmp':time.time()})
 
-        for url, data in _data_list.iteritems():
-            if url in process_link_list:
-                continue
+    except:
+        print "encoding error"
+        pass
 
-            process_link_list.append(url)
-
-            pageinfo = process_page(url, data[0])
-            if pageinfo is not None:
-                linklist, keyurl, urlprofile = pageinfo
-                link_list.extend(linklist)
-                for key, value in keyurl.iteritems():
-                    if key_url.has_key(key):
-                        key_url[key] += value
-                    else:
-                        key_url[key] = value
-                encoding = chardet.detect(url_profile)
-                print 'collection_url_profile', url_profile, encoding
-                if encoding['encoding'] is not None:
-                    url_profile = unicode(url_profile, encoding['encoding'])
-                    collection_url_profile.insert({'key':url, 'urlprofile':url_profile, 'timetmp':time.time(),'date:':data[1]['date']})
-
-        return link_list, key_url, url_profile_dict
-
-    def lprocess_link_list(data_list, key_url, process_link_list):
-        while isinstance(data_list, dict) and len(data_list) > 0:
-            linklist, keyurl, urlprofile = process_sub_link_list(data_list, process_link_list)
-
-            data_list = {}
-            for key, value in keyurl.iteritems():
-                if not key_url.has_key(key):
-                    key_url[key] = []
-
-                for url in value:
-                    if not data_list.has_key(url):
-                        info = get_page(url)
-                        if info is not None:
-                            data_list[url] = info
-                        else:
-                            continue
-
-                    if url not in key_url[key]:
-                        key_url[key].append(url)
-                        collection.insert({'key':key, 'url':url, 'timetmp':time.time()})
-
-                if len(data_list) > 50:
-                    url_profile_dict.update(lprocess_link_list(data_list, key_url, process_link_list))
-                    data_list = {}
-
-            for url in linklist:
-                info = get_page(url)
-                if info is not None:
-                    data_list[url] = info
-
-                if len(data_list) > 50:
-                    url_profile_dict.update(lprocess_link_list(data_list, key_url, process_link_list))
-                    data_list = {}
-
-            url_profile_dict.update(urlprofile)
-
-        return url_profile_dict
-
-    data_list = {}
-    for key, value in key_url1.iteritems():
-        if not key_url.has_key(key):
-            key_url[key] = []
-
-        for url in value:
-            if not data_list.has_key(url):
-                info = get_page(url)
-                if info is not None:
-                    data_list[url] = info
-                else:
-                    continue
-
-            if url not in key_url[key]:
-                key_url[key].append(url)
-                print 'collection', key, url
-                collection.insert({'key':key, 'url':url, 'timetmp':time.time()})
-
-            if len(data_list) > 50:
-                url_profile_dict.update(lprocess_link_list(data_list, key_url, process_link_list))
-                data_list = {}
-
-    for url in link_list:
-        if not data_list.has_key(url):
-            info = get_page(url)
-            if info is not None:
-                data_list[url] = info
-
-            if len(data_list) > 50:
-                url_profile_dict.update(lprocess_link_list(data_list, key_url, process_link_list))
-                data_list = {}
-
-    return url_profile_dict
+    return link_list
 
 def process_page(url, data):
     if data is None:
@@ -296,6 +166,8 @@ def process_page(url, data):
 
         htmlp = htmlprocess(url)
         encoding = chardet.detect(data)
+        if encoding['encoding'] is None:
+            return
         udata = unicode(data, encoding['encoding'])
         htmlp.feed(udata.encode('utf-8'))
 
@@ -309,7 +181,9 @@ def process_page(url, data):
                         key_url[key] = urllist
 
         for data in htmlp.data:
+            data = doclex.delspace(data)
             if len(data) < 32:
+                url_profile += data
                 keys = doclex.simplesplit(data)
                 if isinstance(keys, list) and len(keys) > 0:
                     for key in keys:
@@ -319,20 +193,24 @@ def process_page(url, data):
                             key_url[key].append(url)
             else:
                 if len(data) > 100:
-                    url_profile = data[0:len(data) if len(data) < 100 else 100] + "..."
-                keys1 = process_data(data)
+                    url_profile += data[0:len(data) if len(data) < 100 else 100] + "..."
+                keys1 = doclex.lex(data)
                 for key1 in keys1:
                     if not key_url.has_key(key1):
                         key_url[key1] = []
                     if url not in key_url[key1]:
                         key_url[key1].append(url)
 
-        return htmlp.link, key_url, url_profile
+        #for key, value in key_url.iteritems():
+        #    for url in value:
+        #        if real_page(url):
+        #            collection.insert({'key':key, 'url':url, 'timetmp':time.time()})
+
+        return htmlp.link, url_profile, htmlp.keywords, htmlp.profile, key_url
 
     except:
         import traceback
         traceback.print_exc()
-        #print 'get_page error', url
         pass
 
 
