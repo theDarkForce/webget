@@ -35,6 +35,8 @@ class htmlprocess(HTMLParser.HTMLParser):
         self.keywords = []
         self.profile = ""
 
+        self.title = ""
+
         self.current_tag = ""
 
         self.style = ""
@@ -48,10 +50,36 @@ class htmlprocess(HTMLParser.HTMLParser):
         if tag == 'a':
             for name,value in attrs:
                 if name == 'href':
+                    #print value, 'link value'
+
+                    if self.url.find("cnblogs") != -1:
+                        if value.find("http://msg.cnblogs.com/send?recipient=itwriter") != -1:
+                            return
+                        elif value.find("http://i.cnblogs.com/EditPosts.aspx?opt=1") != -1:
+                            return
+                        elif value.find("http://i.cnblogs.com/EditPosts.aspx?postid=1935371") != -1:
+                            return
+                        elif value.find("http://msg.cnblogs.com/send?recipient=itwriter/") != -1:
+                            return
+                        elif value.find("http://msg.cnblogs.com/send?recipient=itwriter/GetUsername.aspx") != -1:
+                            return
+                        elif value.find("/EnterMyBlog.aspx?NewArticle=1") != -1:
+                            return
+                        elif value[len(value) - 1] == '#':
+                            value = value[0:-1]
+
+                    if value.find('javascript') != -1:
+                        return
+
+                    if self.url.find(value) != -1:
+                        return
+
                     if not judged_url(value):
                         value = self.url + value
                     self.link_url = value
-                    self.link.append(value)
+                    if self.link_url != self.url:
+                        self.link.append(value)
+
         elif tag == 'meta':
             for name,value in attrs:
                 if name == 'name':
@@ -72,21 +100,26 @@ class htmlprocess(HTMLParser.HTMLParser):
             keys = doclex.lex(data)
             if isinstance(keys, list) and len(keys) > 0:
                 for key in keys:
-                    if not self.key_url.has_key(key):
-                        self.key_url[key] = []
-                    self.key_url[key].append(self.url)
+                    #if not self.key_url.has_key(key):
+                        #self.key_url[key] = []
+                    #print key
+                    self.keywords.append(key)
+                    #self.key_url[key].append(self.url)
             data = doclex.delspace(data)
             if len(data) > 0:
-                collection_url_title.insert({'key':self.url, 'title':data, 'timetmp':time.time()})
+                self.title = data
+                #collection_url_title.insert({'key':self.url, 'title':data, 'timetmp':time.time()})
         elif self.current_tag == 'a':
-            if not judged_url(self.link_url):
-                self.link_url = self.url + self.link_url
+            #if not judged_url(self.link_url):
+            #    self.link_url = self.url + self.link_url
             keys = doclex.simplesplit(data)
             if isinstance(keys, list) and len(keys) > 0:
                 for key in keys:
                     if not self.key_url.has_key(key):
                         self.key_url[key] = []
-                    self.key_url[key].append(self.link_url)
+                    if self.link_url != self.url and judged_url(self.link_url):
+                        self.key_url[key].append(self.link_url)
+                        #print key, self.link_url
         else:
             if self.current_tag == 'p' or self.current_tag == 'div':
                 self.data.append(data)
@@ -114,10 +147,19 @@ def get_page(url):
         #print 'get_page error', url
         pass
 
+process_url_list = []
+
 def process_url(url):
+    if url in process_url_list:
+        return "url is be processed"
+
+    process_url_list.append(url)
+
+    print url,"process url"
+
     info = get_page(url)
     if info is None:
-        print "url, error"
+        #print "url, error"
         return
 
     data, headers = info
@@ -125,36 +167,46 @@ def process_url(url):
     pageinfo = process_page(url, data)
 
     if pageinfo is None:
-        print "url, process_page error"
+        #print "url, process_page error"
         return
 
-    link_list, url_profile, keywords, profile, key_url = pageinfo
+    link_list, url_profile, keywords, profile, key_url, title = pageinfo
     #encoding = chardet.detect(url_profile)
 
     try:
         #if encoding['encoding'] is not None:
         encodingdate = chardet.detect(headers['date'])
         date = unicode(headers['date'], encodingdate['encoding'])
-        if profile == '':
-            url_profile = unicode(url_profile, "utf-8")#encoding['encoding'])
-            collection_url_profile.insert({'key':url, 'urlprofile':url_profile, 'timetmp':time.time(), 'date:':date})
-        else:
-            profile = unicode(profile, "utf-8")
-            collection_url_profile.insert({'key':url, 'urlprofile':profile, 'timetmp':time.time(), 'date:':date})
+        try:
+            if profile != '':
+                encoding = chardet.detect(profile)
+                if encoding['encoding'] is None:
+                    try:
+                        profile = unicode(profile, "utf-8")
+                    except:
+                        profile = unicode(profile, "ascii")
+                else:
+                    profile = unicode(profile, encoding['encoding'])
+                collection_url_profile.update({'key':url} , {'key':url, 'urlprofile':profile, 'timetmp':time.time(), 'date':date, 'title':title}, True)
+            else:
+                collection_url_profile.update({'key':url} , {'key':url, 'urlprofile':title, 'timetmp':time.time(), 'date':date, 'title':title}, True)
+        except:
+            collection_url_profile.update({'key':url} , {'key':url, 'urlprofile':title, 'timetmp':time.time(), 'date':date, 'title':title}, True)
 
-        for key in keywords:
-            collection.insert({'key':key, 'url':url, 'timetmp':time.time()})
-
-        for key, value in key_url.iteritems():
-            for url in value:
-                if real_page(url):
-                    collection.insert({'key':key, 'url':url, 'timetmp':time.time()})
+        for key1 in keywords:
+            key = ""
+            for c in key1:
+                if c >= 'A' and c <= 'Z':
+                    c = c.lower()
+                key += c
+            collection.update({'key':key, 'url':url}, {'$set':{'key':key, 'url':url, 'timetmp':time.time()}}, True)
 
     except:
-        print "encoding error"
+        import traceback
+        traceback.print_exc()
         pass
 
-    return link_list
+    return link_list, key_url
 
 def process_page(url, data):
     if data is None:
@@ -171,6 +223,8 @@ def process_page(url, data):
         udata = unicode(data, encoding['encoding'])
         htmlp.feed(udata.encode('utf-8'))
 
+        keywords = htmlp.keywords
+
         key_url.update(htmlp.key_url)
         if len(key_url) > 0:
             for key, value in key_url.iteritems():
@@ -185,6 +239,7 @@ def process_page(url, data):
             if len(data) < 32:
                 url_profile += data
                 keys = doclex.simplesplit(data)
+                keywords.extend(keys)
                 if isinstance(keys, list) and len(keys) > 0:
                     for key in keys:
                         if not key_url.has_key(key):
@@ -195,22 +250,18 @@ def process_page(url, data):
                 if len(data) > 100:
                     url_profile += data[0:len(data) if len(data) < 100 else 100] + "..."
                 keys1 = doclex.lex(data)
+                keywords.extend(keys1)
                 for key1 in keys1:
                     if not key_url.has_key(key1):
                         key_url[key1] = []
                     if url not in key_url[key1]:
                         key_url[key1].append(url)
 
-        #for key, value in key_url.iteritems():
-        #    for url in value:
-        #        if real_page(url):
-        #            collection.insert({'key':key, 'url':url, 'timetmp':time.time()})
-
-        return htmlp.link, url_profile, htmlp.keywords, htmlp.profile, key_url
+        return htmlp.link, url_profile, keywords, htmlp.profile, key_url, htmlp.title
 
     except:
-        import traceback
-        traceback.print_exc()
+        #import traceback
+        #traceback.print_exc()
         pass
 
 
